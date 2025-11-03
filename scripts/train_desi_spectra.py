@@ -174,7 +174,7 @@ def prepare_spectra_batch(
     block_size: int,
     device: torch.device,
     target_dtype: torch.dtype,
-) -> dict[str, torch.Tensor]:
+) -> dict[str, Any] | None:
     """
     Convert the collated DESI batch into the tensors expected by the model.
 
@@ -189,19 +189,37 @@ def prepare_spectra_batch(
         flux = F.pad(flux, (0, pad))
 
     patches = flux.view(B, -1, patch_size)
-    positions = torch.arange(patches.size(1), device=device, dtype=torch.long)
+    token_count = patches.size(1)
+
+    if block_size > 0:
+        token_count = min(token_count, block_size)
+        patches = patches[:, :token_count]
+
+    if token_count < 2:
+        return None
+
+    positions = torch.arange(token_count, device=device, dtype=torch.long)
     positions = positions.unsqueeze(0).expand(B, -1)
 
-    if block_size > 0 and patches.size(1) > block_size:
-        patches = patches[:, :block_size]
-        positions = positions[:, :block_size]
+    inputs = patches[:, :-1].to(dtype=target_dtype)
+    targets = patches[:, 1:].to(dtype=target_dtype)
+    input_positions = positions[:, :-1]
 
-    spectra_tokens = patches.to(dtype=target_dtype)
-    batch_dict = {
-        "spectra": spectra_tokens,
-        "spectra_positions": positions,
+    meta_fields = {}
+    for key in ("targetid", "redshift", "norm"):
+        if key in batch:
+            meta_fields[key] = batch[key]
+
+    return {
+        "X": {
+            "spectra": inputs,
+            "spectra_positions": input_positions,
+        },
+        "Y": {
+            "spectra": targets,
+        },
+        "meta": meta_fields,
     }
-    return batch_dict
 
 
 def create_dataloaders(
@@ -402,11 +420,14 @@ def main() -> None:
                 device=device,
                 target_dtype=target_dtype,
             )
+            if batch_tokens is None:
+                continue
+            inputs = batch_tokens["X"]
+            targets = batch_tokens["Y"]
 
             with autocast_ctx:
-                # Forward pass returns a dictionary; we focus on the loss scalar.
-                outputs = model(batch_tokens)
-                loss = outputs["loss"]
+                # Forward pass returns predictions and loss; we track the loss scalar.
+                _, loss = model(inputs, targets=targets)
 
             # Gradient accumulation splits the effective batch across micro-steps.
             loss = loss / config.gradient_accumulation_steps
@@ -468,10 +489,16 @@ def main() -> None:
                                 device=device,
                                 target_dtype=target_dtype,
                             )
+                            if eval_tokens is None:
+                                continue
                             with autocast_ctx:
-                                outputs = model(eval_tokens)
-                                losses.append(outputs["loss"].item())
+                                _, eval_loss = model(
+                                    eval_tokens["X"], targets=eval_tokens["Y"]
+                                )
+                                losses.append(eval_loss.item())
                     model.train()
+                    if not losses:
+                        return float("inf")
                     return float(sum(losses) / len(losses))
 
                 val_loss = run_eval(val_loader)
