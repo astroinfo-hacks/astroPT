@@ -15,6 +15,7 @@ Create the conda environment with Python 3.11:
 ```bash
 conda create --prefix /pbs/throng/training/astroinfo2025/env/04_generative_jax python=3.11 pip -y
 conda activate /pbs/throng/training/astroinfo2025/env/astroPT
+unset PYTHONPATH
 pip install astropt ipykernel einops
 ```
 
