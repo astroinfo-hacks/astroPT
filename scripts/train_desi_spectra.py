@@ -467,6 +467,9 @@ def main() -> None:
     )
     tokens_per_iter = estimate_tokens_per_iter(config, world_size, modalities)
 
+    run_stamp = time.strftime("%Y%m%d-%H%M%S")
+    model_tag = f"L{config.n_layer}_H{config.n_head}_E{config.n_embd}_BS{config.block_size}"
+
     if master_process:
         os.makedirs(config.out_dir, exist_ok=True)
         print(f"Training logs will be written to: {config.out_dir}")
@@ -637,8 +640,12 @@ def main() -> None:
                             "optimizer": optimizer.state_dict(),
                             "iter_num": iter_num,
                             "config": config.__dict__,
+                            "best_val_loss": best_val_loss,
                         }
-                        ckpt_path = os.path.join(config.out_dir, "ckpt.pt")
+                        ckpt_path = os.path.join(
+                            config.out_dir,
+                            f"ckpt_best_{model_tag}_{run_stamp}.pt",
+                        )
                         torch.save(checkpoint, ckpt_path)
                         print(f"Saved checkpoint to {ckpt_path}")
 
@@ -656,7 +663,8 @@ def main() -> None:
                     "best_val_loss": best_val_loss,
                 }
                 ckpt_path = os.path.join(
-                    config.out_dir, f"ckpt_{iter_num:06d}.pt"
+                    config.out_dir,
+                    f"ckpt_{model_tag}_{run_stamp}_iter{iter_num:06d}.pt",
                 )
                 torch.save(periodic_ckpt, ckpt_path)
                 print(f"[checkpoint] saved periodic checkpoint to {ckpt_path}")
