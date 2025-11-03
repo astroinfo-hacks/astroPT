@@ -52,7 +52,7 @@ class TrainingConfig:
     eval_interval: int = 500
     eval_iters: int = 100
     log_interval: int = 50
-    checkpoint_interval: int = 2000
+    checkpoint_interval: int = 10_000
     always_save_checkpoint: bool = False
     batch_size: int = 16
     gradient_accumulation_steps: int = 4
@@ -641,6 +641,25 @@ def main() -> None:
                         ckpt_path = os.path.join(config.out_dir, "ckpt.pt")
                         torch.save(checkpoint, ckpt_path)
                         print(f"Saved checkpoint to {ckpt_path}")
+
+            if (
+                master_process
+                and config.checkpoint_interval > 0
+                and iter_num > 0
+                and iter_num % config.checkpoint_interval == 0
+            ):
+                periodic_ckpt = {
+                    "model": base_model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "iter_num": iter_num,
+                    "config": config.__dict__,
+                    "best_val_loss": best_val_loss,
+                }
+                ckpt_path = os.path.join(
+                    config.out_dir, f"ckpt_{iter_num:06d}.pt"
+                )
+                torch.save(periodic_ckpt, ckpt_path)
+                print(f"[checkpoint] saved periodic checkpoint to {ckpt_path}")
 
             if iter_num >= config.max_iters:
                 break
