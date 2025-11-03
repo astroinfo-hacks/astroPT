@@ -205,6 +205,9 @@ def prepare_spectra_batch(
     targets = patches[:, 1:].to(dtype=target_dtype)
     input_positions = positions[:, :-1]
 
+    if not torch.isfinite(inputs).all() or not torch.isfinite(targets).all():
+        return None
+
     meta_fields = {}
     for key in ("targetid", "redshift", "norm"):
         if key in batch:

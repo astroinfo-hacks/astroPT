@@ -100,6 +100,13 @@ class DESISpectraDataset(torch.utils.data.Dataset):
         flux = flux.clone()
         if ivar is not None:
             ivar = ivar.clone()
+        if mask is not None:
+            mask = mask.clone()
+
+        flux = torch.nan_to_num(flux, nan=0.0, posinf=0.0, neginf=0.0)
+        if ivar is not None:
+            ivar = torch.nan_to_num(ivar, nan=0.0, posinf=0.0, neginf=0.0)
+        wavelength = torch.nan_to_num(wavelength, nan=0.0, posinf=0.0, neginf=0.0)
 
         wave_rest = wavelength
         valid = torch.isfinite(flux) & torch.isfinite(wave_rest)
@@ -121,6 +128,10 @@ class DESISpectraDataset(torch.utils.data.Dataset):
         flux = flux / norm_value
         if ivar is not None:
             ivar = ivar * (norm_value**2)
+
+        flux = torch.where(valid, flux, torch.zeros_like(flux))
+        if ivar is not None:
+            ivar = torch.where(valid, ivar, torch.zeros_like(ivar))
 
         return flux, ivar, norm_value
 
