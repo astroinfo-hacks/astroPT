@@ -306,7 +306,7 @@ def main() -> None:
             patch_size=config.patch_size,
             pos_input_size=1,
             loss_weight=1.0,
-            embed_pos=False,
+            embed_pos=True,
         ),
     ]
     modality_registry = ModalityRegistry(modalities)
