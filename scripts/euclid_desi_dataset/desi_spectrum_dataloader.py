@@ -77,10 +77,15 @@ def _to_tensor(array) -> torch.Tensor | None:
 class DESISpectraDataset(torch.utils.data.Dataset):
     """PyTorch wrapper for the DESI spectra dataset."""
 
-    def __init__(self, data_dir: str = DEFAULT_DATA_DIR, split: str | None = None):
+    def __init__(
+        self,
+        data_dir: str = DEFAULT_DATA_DIR,
+        split: str | None = None,
+        hf_dataset: Dataset | None = None,
+    ):
         self.data_dir = data_dir
         self.split = split
-        self.dataset = _load_local_hf_dataset(data_dir, split)
+        self.dataset = hf_dataset or _load_local_hf_dataset(data_dir, split)
 
     def __len__(self) -> int:
         return len(self.dataset)

@@ -48,6 +48,7 @@ class TrainingConfig:
     data_dir: str = "/pbs/home/a/astroinfo08/astroinfo2025/data/astroPT_desi_dataset"
     train_split: str | None = None
     val_split: str | None = None
+    test_split: str | None = None
     eval_interval: int = 500
     eval_iters: int = 100
     log_interval: int = 50
@@ -79,6 +80,9 @@ class TrainingConfig:
     log_via_wandb: bool = False
     wandb_project: str | None = None
     wandb_run_name: str | None = None
+    val_fraction: float = 0.1
+    test_fraction: float = 0.1
+    split_seed: int = 42
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +98,7 @@ def parse_args() -> TrainingConfig:
     parser.add_argument("--data-dir", default=TrainingConfig.data_dir)
     parser.add_argument("--train-split", default=None)
     parser.add_argument("--val-split", default=None)
+    parser.add_argument("--test-split", default=None)
     parser.add_argument("--batch-size", type=int, default=TrainingConfig.batch_size)
     parser.add_argument(
         "--grad-accum",
@@ -114,6 +119,9 @@ def parse_args() -> TrainingConfig:
     )
     parser.add_argument("--wandb-project", default=TrainingConfig.wandb_project)
     parser.add_argument("--wandb-run-name", default=TrainingConfig.wandb_run_name)
+    parser.add_argument("--val-fraction", type=float, default=TrainingConfig.val_fraction)
+    parser.add_argument("--test-fraction", type=float, default=TrainingConfig.test_fraction)
+    parser.add_argument("--split-seed", type=int, default=TrainingConfig.split_seed)
     args = parser.parse_args()
 
     config = TrainingConfig()
@@ -121,6 +129,7 @@ def parse_args() -> TrainingConfig:
     config.data_dir = args.data_dir
     config.train_split = args.train_split
     config.val_split = args.val_split
+    config.test_split = args.test_split
     config.batch_size = args.batch_size
     config.gradient_accumulation_steps = args.grad_accum
     config.num_workers = args.num_workers
@@ -130,6 +139,9 @@ def parse_args() -> TrainingConfig:
     config.log_via_wandb = args.log_wandb and _WANDB_AVAILABLE
     config.wandb_project = args.wandb_project
     config.wandb_run_name = args.wandb_run_name
+    config.val_fraction = args.val_fraction
+    config.test_fraction = args.test_fraction
+    config.split_seed = args.split_seed
     return config
 
 
@@ -225,22 +237,103 @@ def prepare_spectra_batch(
     }
 
 
-def create_dataloaders(
-    config: TrainingConfig, ddp: bool, world_size: int, rank: int
-) -> tuple[DataLoader, DataLoader | None]:
-    """Initialise training and validation dataloaders."""
-    train_dataset = DESISpectraDataset(
-        data_dir=config.data_dir,
-        split=config.train_split,
-    )
-    val_dataset = (
-        DESISpectraDataset(
+def prepare_dataset_splits(
+    config: TrainingConfig, master_process: bool
+) -> tuple[DESISpectraDataset, DESISpectraDataset | None, DESISpectraDataset | None]:
+    """Load the DESI dataset and prepare train/val/test splits."""
+
+    if config.val_fraction + config.test_fraction >= 1.0:
+        raise ValueError("val_fraction + test_fraction must be < 1.0")
+
+    if config.train_split and config.val_split and config.test_split:
+        train_dataset = DESISpectraDataset(
+            data_dir=config.data_dir,
+            split=config.train_split,
+        )
+        val_dataset = DESISpectraDataset(
             data_dir=config.data_dir,
             split=config.val_split,
         )
-        if config.val_split is not None
-        else None
-    )
+        test_dataset = DESISpectraDataset(
+            data_dir=config.data_dir,
+            split=config.test_split,
+        )
+        total = len(train_dataset) + len(val_dataset) + len(test_dataset)
+    else:
+        base_dataset = DESISpectraDataset(
+            data_dir=config.data_dir,
+            split=config.train_split,
+        )
+        hf_dataset = base_dataset.dataset
+        total = len(hf_dataset)
+        if total == 0:
+            raise RuntimeError("Loaded dataset is empty; cannot create splits.")
+
+        val_frac = config.val_fraction
+        test_frac = config.test_fraction
+        temp_frac = val_frac + test_frac
+
+        if temp_frac > 0:
+            split_dict = hf_dataset.train_test_split(
+                test_size=temp_frac,
+                seed=config.split_seed,
+            )
+            train_hf = split_dict["train"]
+            temp_hf = split_dict["test"]
+
+            if test_frac > 0:
+                if temp_frac == 0:
+                    raise ValueError("temp_frac is zero despite non-zero test_frac")
+                relative_test = test_frac / temp_frac
+                val_test_split = temp_hf.train_test_split(
+                    test_size=relative_test,
+                    seed=config.split_seed,
+                )
+                val_hf = val_test_split["train"]
+                test_hf = val_test_split["test"]
+            else:
+                val_hf = temp_hf
+                test_hf = None
+        else:
+            train_hf = hf_dataset
+            val_hf = None
+            test_hf = None
+
+        train_dataset = DESISpectraDataset(
+            data_dir=config.data_dir,
+            hf_dataset=train_hf,
+        )
+        val_dataset = (
+            DESISpectraDataset(data_dir=config.data_dir, hf_dataset=val_hf)
+            if val_hf is not None
+            else None
+        )
+        test_dataset = (
+            DESISpectraDataset(data_dir=config.data_dir, hf_dataset=test_hf)
+            if test_hf is not None
+            else None
+        )
+    if master_process:
+        train_len = len(train_dataset)
+        val_len = len(val_dataset) if val_dataset is not None else 0
+        test_len = len(test_dataset) if test_dataset is not None else 0
+        print(
+            f"Dataset sizes -> total: {train_len + val_len + test_len:,} | "
+            f"train: {train_len:,} | val: {val_len:,} | test: {test_len:,}"
+        )
+    return train_dataset, val_dataset, test_dataset
+
+
+def create_dataloaders(
+    train_dataset: DESISpectraDataset,
+    val_dataset: DESISpectraDataset | None,
+    test_dataset: DESISpectraDataset | None,
+    config: TrainingConfig,
+    ddp: bool,
+    world_size: int,
+    rank: int,
+) -> tuple[DataLoader, DataLoader | None, DataLoader | None]:
+    """Initialise dataloaders for each split."""
 
     train_sampler = (
         DistributedSampler(
@@ -254,17 +347,19 @@ def create_dataloaders(
         else None
     )
 
-    val_sampler = (
-        DistributedSampler(
-            val_dataset,
+    def build_sampler(dataset, shuffle):
+        if not ddp or dataset is None:
+            return None
+        return DistributedSampler(
+            dataset,
             num_replicas=world_size,
             rank=rank,
-            shuffle=False,
+            shuffle=shuffle,
             drop_last=False,
         )
-        if ddp and val_dataset is not None
-        else None
-    )
+
+    val_sampler = build_sampler(val_dataset, shuffle=False)
+    test_sampler = build_sampler(test_dataset, shuffle=False)
 
     train_loader = DataLoader(
         train_dataset,
@@ -290,7 +385,21 @@ def create_dataloaders(
         if val_dataset is not None
         else None
     )
-    return train_loader, val_loader
+    test_loader = (
+        DataLoader(
+            test_dataset,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=config.num_workers,
+            collate_fn=spectra_collate,
+            pin_memory=True,
+            drop_last=False,
+            sampler=test_sampler,
+        )
+        if test_dataset is not None
+        else None
+    )
+    return train_loader, val_loader, test_loader
 
 
 def estimate_tokens_per_iter(
@@ -332,6 +441,10 @@ def main() -> None:
     ]
     modality_registry = ModalityRegistry(modalities)
 
+    train_dataset, val_dataset, test_dataset = prepare_dataset_splits(
+        config, master_process
+    )
+
     if ddp:
         # When running with DDP every rank performs gradient accumulation locally.
         # We divide by world size so the effective number of micro-steps matches
@@ -343,7 +456,15 @@ def main() -> None:
 
     # Build the PyTorch dataloaders, wiring in DistributedSampler instances when
     # the script is launched under torchrun so that each rank sees unique data.
-    train_loader, val_loader = create_dataloaders(config, ddp, world_size, ddp_rank)
+    train_loader, val_loader, test_loader = create_dataloaders(
+        train_dataset,
+        val_dataset,
+        test_dataset,
+        config,
+        ddp,
+        world_size,
+        ddp_rank,
+    )
     tokens_per_iter = estimate_tokens_per_iter(config, world_size, modalities)
 
     if master_process:
