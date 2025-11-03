@@ -44,7 +44,7 @@ from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
 class TrainingConfig:
     """Container that gathers together the main hyperparameters."""
 
-    out_dir: str = "logs/astropt_desi_spectra"
+    out_dir: str = "/pbs/throng/training/astroinfo2025/work/mhuertas/logs/astropt_desi_spectra"
     data_dir: str = "/pbs/home/a/astroinfo08/astroinfo2025/data/astroPT_desi_dataset"
     train_split: str | None = None
     val_split: str | None = None
