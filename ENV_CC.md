@@ -15,26 +15,7 @@ Create the conda environment with Python 3.11:
 ```bash
 conda create --prefix /pbs/throng/training/astroinfo2025/env/04_generative_jax python=3.11 pip -y
 conda activate /pbs/throng/training/astroinfo2025/env/astroPT
-pip install astropt ipykernel datasets einops
-```
-
-Install uv in the environment:
-
-```bash
-conda install -c conda-forge uv -y
-```
-
-Create venv for astroPT:
-
-```bash
-cd /pbs/throng/training/astroinfo2025/soft/astroPT
-uv sync
-```
-
-Add few more packages if needed:
-
-```bash
-uv pip install ipykernel datasets einops
+pip install astropt ipykernel einops
 ```
 
 ## Activate the environment
