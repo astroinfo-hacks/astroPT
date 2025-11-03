@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import math
 import os
 
 import matplotlib
@@ -84,32 +85,92 @@ class DESISpectraDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.dataset)
 
+    @staticmethod
+    def _normalise_spectrum(
+        flux: torch.Tensor,
+        ivar: torch.Tensor | None,
+        wavelength: torch.Tensor | None,
+        mask: torch.Tensor | None,
+        redshift: float | None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, float] | None:
+        """Normalise a spectrum using the median flux in a rest-frame window."""
+        if flux is None or wavelength is None:
+            return None
+
+        flux = flux.clone()
+        if ivar is not None:
+            ivar = ivar.clone()
+
+        wave_rest = wavelength
+        valid = torch.isfinite(flux) & torch.isfinite(wave_rest)
+        if ivar is not None:
+            valid &= ivar > 0
+        if mask is not None:
+            valid &= mask == 0
+
+        window = (wave_rest > 5300) & (wave_rest < 5850)
+        sel = valid & window
+        if not torch.any(sel):
+            return None
+
+        norm_tensor = torch.nanmedian(flux[sel])
+        norm_value = float(norm_tensor) if norm_tensor.numel() > 0 else float("nan")
+        if not math.isfinite(norm_value) or norm_value == 0:
+            return None
+
+        flux = flux / norm_value
+        if ivar is not None:
+            ivar = ivar * (norm_value**2)
+
+        return flux, ivar, norm_value
+
     def __getitem__(self, idx: int) -> dict:
-        sample = self.dataset[idx]
-        flux = _to_tensor(sample.get("flux"))
-        wavelength = _to_tensor(sample.get("wavelength"))
-        ivar = _to_tensor(sample.get("ivar"))
-        mask = _to_tensor(sample.get("mask"))
+        attempts = 0
+        data_len = len(self.dataset)
+        current_idx = idx % data_len
 
-        if flux is None:
-            raise ValueError(
-                "Spectrum flux is missing for sample "
-                f"{sample.get('targetid', idx)}"
-            )
+        while attempts < data_len:
+            sample = self.dataset[current_idx]
+            flux = _to_tensor(sample.get("flux"))
+            wavelength = _to_tensor(sample.get("wavelength"))
+            ivar = _to_tensor(sample.get("ivar"))
+            mask = _to_tensor(sample.get("mask"))
+            redshift = sample.get("redshift")
 
-        payload = {
-            "flux": flux,
-            "wavelength": wavelength,
-            "ivar": ivar,
-            "mask": mask,
-            "targetid": sample.get("targetid"),
-            "redshift": sample.get("redshift"),
-        }
-        return payload
+            if flux is None:
+                attempts += 1
+                current_idx = (current_idx + 1) % data_len
+                continue
+
+            normalised = self._normalise_spectrum(flux, ivar, wavelength, mask, redshift)
+            if normalised is None:
+                attempts += 1
+                current_idx = (current_idx + 1) % data_len
+                continue
+
+            norm_flux, norm_ivar, norm_value = normalised
+
+            payload = {
+                "flux": norm_flux,
+                "wavelength": wavelength,
+                "ivar": norm_ivar,
+                "mask": mask,
+                "targetid": sample.get("targetid"),
+                "redshift": redshift,
+                "norm": norm_value,
+            }
+            return payload
+
+        raise RuntimeError("Unable to normalise any spectrum in the dataset.")
 
 
 def spectra_collate(batch: list[dict]) -> dict:
     """Custom collate function that keeps metadata as lists and stacks tensors."""
+    # Filter out any None entries (should not occur, but keeps collate robust).
+    batch = [item for item in batch if item is not None]
+    if not batch:
+        raise ValueError("All samples in batch were invalid after normalisation.")
+
     collated: dict[str, list | torch.Tensor | None] = {}
     keys = batch[0].keys()
     for key in keys:
@@ -214,6 +275,7 @@ def main() -> None:
 
     print("Example target IDs:", batch["targetid"])
     print("Example redshifts:", batch["redshift"])
+    print("Normalisation factors:", batch["norm"])
 
     visualise_sample(batch, args.plot_path)
     print(f"Saved diagnostic plot to '{args.plot_path}'.")
