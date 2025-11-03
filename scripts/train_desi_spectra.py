@@ -54,7 +54,7 @@ class TrainingConfig:
     log_interval: int = 50
     checkpoint_interval: int = 2000
     always_save_checkpoint: bool = False
-    batch_size: int = 8
+    batch_size: int = 16
     gradient_accumulation_steps: int = 4
     num_workers: int = 8
     block_size: int = 256
@@ -73,7 +73,7 @@ class TrainingConfig:
     warmup_iters: int = 2000
     lr_decay_iters: int = 30000
     min_lr: float = 6e-5
-    max_iters: int = 30000
+    max_iters: int = 500000
     device: str = "cuda"
     dtype: str = "bfloat16"
     compile: bool = True
