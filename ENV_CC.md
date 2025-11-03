@@ -24,7 +24,7 @@ pip install astropt ipykernel einops
 To activate the astroPT environment, run:
 
 ```bash
-source /pbs/throng/training/astroinfo2025/soft/astroPT/source_venv.sh
+source /pbs/throng/training/astroinfo2025/soft/astroPT/source_CC.sh
 ```
 
 ## Jupyter Environment Setup
