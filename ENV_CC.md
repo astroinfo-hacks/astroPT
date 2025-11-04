@@ -61,7 +61,7 @@ chmod +x $HOME/.local/share/jupyter/kernels/astroPT/jupyter-helper.sh
 ```bash
 cat > $HOME/.local/share/jupyter/kernels/astroPT/kernel.json << EOF
 {
-  "display_name": "Torch (2.9.0)",
+  "display_name": "astroPT",
   "language": "python",
   "argv": [
       "$HOME/.local/share/jupyter/kernels/astroPT/jupyter-helper.sh",
