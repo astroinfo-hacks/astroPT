@@ -22,9 +22,18 @@ DEFAULT_DATA_DIR = "/pbs/home/a/astroinfo08/astroinfo2025/data/astroPT_desi_data
 DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/mhuertas/logs/astropt_desi_spectra/ckpt.pt"
 
 
-def load_checkpoint(checkpoint_path: str, device: str):
-    """Load model checkpoint from disk."""
-    from astropt.model import GPT, GPTConfig
+def load_checkpoint(checkpoint_path: str, device: str, patch_size: int = 256):
+    """Load model checkpoint from disk.
+    
+    Args:
+        checkpoint_path: Path to the checkpoint file
+        device: Device to load the model on
+        patch_size: Patch size used during training (needed for modality config)
+    
+    Returns:
+        Tuple of (model, config)
+    """
+    from astropt.model import GPT, GPTConfig, ModalityConfig, ModalityRegistry
     
     print(f"Loading checkpoint from: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -48,11 +57,24 @@ def load_checkpoint(checkpoint_path: str, device: str):
     else:
         config = model_args
     
-    # Initialize and load model
-    model = GPT(config)
+    # Create modality registry for DESI spectra (same as in training script)
+    modalities = [
+        ModalityConfig(
+            name="spectra",
+            input_size=patch_size,
+            patch_size=patch_size,
+            pos_input_size=1,
+            loss_weight=1.0,
+            embed_pos=True,
+        ),
+    ]
+    modality_registry = ModalityRegistry(modalities)
+    
+    # Initialize model with config and modality registry
+    model = GPT(config, modality_registry)
     state_dict = checkpoint.get('model', checkpoint)
     
-    # Remove module prefix if present
+    # Remove module prefix if present (from DDP or torch.compile)
     unwanted_prefix = '_orig_mod.'
     for k in list(state_dict.keys()):
         if k.startswith(unwanted_prefix):
@@ -276,7 +298,7 @@ def main():
     args = parser.parse_args()
 
     # Load model
-    model, config = load_checkpoint(args.checkpoint, args.device)
+    model, config = load_checkpoint(args.checkpoint, args.device, args.patch_size)
     
     # Create dataset and dataloader
     print(f"\nLoading dataset from: {args.data_dir}")
