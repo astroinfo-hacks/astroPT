@@ -99,7 +99,7 @@ class TrainingConfig:
     gradient_accumulation_steps: int = 4
     num_workers: int = 8
     block_size: int = 256
-    patch_size: int = 256
+    patch_size: int = 10
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
