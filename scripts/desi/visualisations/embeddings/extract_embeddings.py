@@ -269,17 +269,17 @@ def main():
     )
     parser.add_argument(
         "--out-embeddings",
-        default="desi_embeddings.npy",
+        default="./scripts/desi/visualisations/embeddings/desi_embeddings.npy",
         help="Output file for embeddings",
     )
     parser.add_argument(
         "--out-targetids",
-        default="desi_targetids.npy",
+        default="./scripts/desi/visualisations/embeddings/desi_targetids.npy",
         help="Output file for target IDs",
     )
     parser.add_argument(
         "--out-redshifts",
-        default="desi_redshifts.npy",
+        default="./scripts/desi/visualisations/embeddings/desi_redshifts.npy",
         help="Output file for redshifts",
     )
     args = parser.parse_args()
