@@ -5,6 +5,47 @@ This script mirrors the structure of the generic AstroPT training loop while
 replacing all imaging components with the DESI spectrum loader introduced in
 scripts/euclid_desi_dataset/desi_spectrum_dataloader.py. It supports single GPU
 debug runs and multi-GPU distributed data parallel (DDP) launches via torchrun.
+
+USAGE EXAMPLES:
+===============
+
+Single GPU training:
+-------------------
+python scripts/train_desi_spectra.py --batch-size 16 --compile
+
+Multi-GPU training (2 GPUs):
+---------------------------
+torchrun --standalone --nproc_per_node=2 scripts/train_desi_spectra.py \
+    --batch-size 16 \
+    --grad-accum 4 \
+    --compile
+
+CONFIGURATION:
+==============
+
+To increase training iterations (default: 500,000):
+---------------------------------------------------
+Edit the TrainingConfig dataclass below and change:
+    max_iters: int = 500000  # <- Increase this value (e.g., 1000000 for longer training)
+
+Training runs for a FIXED NUMBER OF ITERATIONS, not epochs.
+Approximate epochs = max_iters / (dataset_size / batch_size / grad_accum / num_gpus)
+
+Other important parameters:
+--------------------------
+- --batch-size: Batch size per GPU (default: 16)
+- --grad-accum: Gradient accumulation steps (default: 4)
+- --compile: Enable torch.compile for faster training
+- --log-wandb: Enable Weights & Biases logging
+- --eval-interval: How often to run validation (default: 500 iterations)
+- --checkpoint-interval: How often to save checkpoints (default: 10,000 iterations)
+
+Multi-GPU notes:
+---------------
+- Use torchrun with --nproc_per_node=N where N is the number of GPUs
+- Effective batch size = batch_size × num_gpus × grad_accum
+- Training speed scales nearly linearly with number of GPUs
+- Only the master process (GPU 0) prints logs and saves checkpoints
 """
 
 from __future__ import annotations
