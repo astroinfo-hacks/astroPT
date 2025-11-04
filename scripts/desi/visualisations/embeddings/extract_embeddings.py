@@ -100,33 +100,6 @@ def find_final_norm(model):
     return candidate
 
 
-def patchify_spectra(flux: torch.Tensor, patch_size: int) -> torch.Tensor:
-    """Convert spectra into patches (tokens).
-    
-    Args:
-        flux: (B, 1, L) tensor of flux values
-        patch_size: Size of each patch
-    
-    Returns:
-        tokens: (B, num_patches, patch_size) tensor
-    """
-    B, C, L = flux.shape
-    assert C == 1, "Expected single-channel spectra"
-    
-    # Ensure length is divisible by patch_size
-    if L % patch_size != 0:
-        # Pad to make it divisible
-        pad_length = patch_size - (L % patch_size)
-        flux = F.pad(flux, (0, pad_length), mode='constant', value=0)
-        L = flux.shape[2]
-    
-    num_patches = L // patch_size
-    # Reshape: (B, 1, L) -> (B, num_patches, patch_size)
-    tokens = flux.view(B, num_patches, patch_size)
-    
-    return tokens
-
-
 def prepare_spectra_batch(batch, patch_size: int, device: str):
     """Prepare a batch of spectra for model input.
     
@@ -136,21 +109,35 @@ def prepare_spectra_batch(batch, patch_size: int, device: str):
         device: Device to move tensors to
     
     Returns:
-        Tuple of (input_tokens, target_ids, redshifts)
+        Tuple of (inputs_dict, target_ids, redshifts)
     """
     flux = batch["flux"].to(device)  # (B, L)
+    B, L = flux.shape
     
-    # Add channel dimension: (B, L) -> (B, 1, L)
-    flux = flux.unsqueeze(1)
+    # Pad flux to be divisible by patch_size
+    pad = (patch_size - (L % patch_size)) % patch_size
+    if pad:
+        flux = F.pad(flux, (0, pad))
     
-    # Patchify into tokens
-    tokens = patchify_spectra(flux, patch_size)  # (B, num_patches, patch_size)
+    # Reshape into patches: (B, L) -> (B, num_patches, patch_size)
+    patches = flux.view(B, -1, patch_size)
+    num_patches = patches.size(1)
+    
+    # Create position indices for each patch
+    positions = torch.arange(num_patches, device=device, dtype=torch.long)
+    positions = positions.unsqueeze(0).expand(B, -1)  # (B, num_patches)
+    
+    # Prepare inputs dict as expected by the model
+    inputs = {
+        "spectra": patches,  # (B, num_patches, patch_size)
+        "spectra_positions": positions,  # (B, num_patches)
+    }
     
     # Get metadata
     target_ids = batch["targetid"]
     redshifts = batch["redshift"]
     
-    return tokens, target_ids, redshifts
+    return inputs, target_ids, redshifts
 
 
 def extract_embeddings(
@@ -200,12 +187,12 @@ def extract_embeddings(
                     break
                 
                 # Prepare input
-                tokens, target_ids, redshifts = prepare_spectra_batch(
+                inputs, target_ids, redshifts = prepare_spectra_batch(
                     batch, patch_size, device
                 )
                 
                 # Forward pass (triggers hook)
-                _ = model(tokens)
+                _ = model(inputs)
                 
                 # Extract embeddings from hook
                 hidden = captured_hidden['last']  # (B, num_tokens, n_embd)
