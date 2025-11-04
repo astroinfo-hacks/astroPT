@@ -16,7 +16,7 @@ Create the conda environment with Python 3.11:
 conda create --prefix /pbs/throng/training/astroinfo2025/env/astroPT python=3.11 pip -y
 conda activate /pbs/throng/training/astroinfo2025/env/astroPT
 unset PYTHONPATH
-pip install astropt ipykernel einops
+pip install astropt ipykernel einops umap-learn
 ```
 
 ## Activate the environment
