@@ -31,8 +31,20 @@ def load_checkpoint(checkpoint_path: str, device: str):
     
     # Extract model configuration
     model_args = checkpoint.get('model_args', checkpoint.get('config', {}))
-    if isinstance(model_args, dict):
-        config = GPTConfig(**model_args)
+    
+    # If model_args is already a GPTConfig object, use it directly
+    if isinstance(model_args, GPTConfig):
+        config = model_args
+    elif isinstance(model_args, dict):
+        # Filter out non-model config keys (training-specific parameters)
+        # Get valid GPTConfig parameters by inspecting the class
+        import inspect
+        valid_params = set(inspect.signature(GPTConfig.__init__).parameters.keys())
+        valid_params.discard('self')
+        
+        # Filter model_args to only include valid GPTConfig parameters
+        filtered_args = {k: v for k, v in model_args.items() if k in valid_params}
+        config = GPTConfig(**filtered_args)
     else:
         config = model_args
     
