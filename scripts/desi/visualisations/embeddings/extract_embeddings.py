@@ -18,7 +18,7 @@ from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
 )
 
 
-DEFAULT_DATA_DIR = "/pbs/home/a/astroinfo08/astroinfo2025/data/astroPT_desi_dataset"
+DEFAULT_DATA_DIR = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset/"
 DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/mhuertas/logs/astropt_desi_spectra/ckpt.pt"
 
 
