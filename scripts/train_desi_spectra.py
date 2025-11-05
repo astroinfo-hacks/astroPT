@@ -742,8 +742,12 @@ def main() -> None:
                                 with torch.no_grad():
                                     with eval_ctx:
                                         preds, _ = model(sample_inputs, targets=sample_targets)
-                                preds_tensor = preds["spectra"].detach().cpu()
-                                target_tensor = sample_targets["spectra"].detach().cpu()
+                                preds_tensor = (
+                                    preds["spectra"].detach().to(dtype=torch.float32).cpu()
+                                )
+                                target_tensor = (
+                                    sample_targets["spectra"].detach().to(dtype=torch.float32).cpu()
+                                )
                                 num_examples = min(4, preds_tensor.size(0))
                                 if num_examples > 0:
                                     fig, axes = plt.subplots(
