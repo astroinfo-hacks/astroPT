@@ -194,6 +194,9 @@ def spectra_collate(batch: list[dict]) -> dict:
         first = values[0]
         if isinstance(first, torch.Tensor):
             collated[key] = torch.stack(values)
+        elif key == "targetid":
+            # CRITICAL: Keep TARGETIDs as int64 list to preserve precision
+            collated[key] = values
         elif isinstance(first, (int, float)) and all(
             isinstance(v, (int, float)) for v in values
         ):
