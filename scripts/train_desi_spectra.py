@@ -73,6 +73,7 @@ except ImportError:  # pragma: no cover - optional dependency
     _WANDB_AVAILABLE = False
 
 from astropt.model import GPT, GPTConfig, ModalityConfig, ModalityRegistry
+# scripts/euclid_desi_dataset/desi_spectrum_dataloader.py 
 from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
     DESISpectraDataset,
     spectra_collate,
@@ -86,7 +87,7 @@ from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
 class TrainingConfig:
     """Container that gathers together the main hyperparameters."""
 
-    out_dir: str = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra"
+    out_dir: str = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2"
     data_dir: str = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset" 
     train_split: str | None = None
     val_split: str | None = None

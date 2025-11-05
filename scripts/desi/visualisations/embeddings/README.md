@@ -75,7 +75,7 @@ First, test the extraction pipeline on a small subset:
 
 ```bash
 python scripts/desi/visualisations/embeddings/extract_embeddings.py \
-    --checkpoint /pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra/ckpt.pt \
+    --checkpoint /pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2/ckpt.pt \
     --data-dir /pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset/ \
     --batch-size 16 \
     --max-batches 10 \
@@ -91,7 +91,7 @@ Process the entire dataset (this may take hours):
 
 ```bash
 python scripts/desi/visualisations/embeddings/extract_embeddings.py \
-    --checkpoint /pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra/ckpt.pt \
+    --checkpoint /pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2/ckpt.pt \
     --data-dir /pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset/ \
     --split train \
     --batch-size 64 \
