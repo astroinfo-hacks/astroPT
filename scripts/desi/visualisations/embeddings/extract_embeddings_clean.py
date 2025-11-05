@@ -19,6 +19,8 @@ from euclid_desi_dataset.desi_spectrum_dataloader import (
 
 DEFAULT_DATA_DIR = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset"
 DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2/ckpt_best_L12_H12_E768_BS256_20251105-124945.pt"
+#DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2/ckpt_L12_H12_E768_BS256_20251105-124945_iter230000.pt"
+
 
 def load_checkpoint(checkpoint_path: str, device: str, patch_size: int = 256):
     """Load model checkpoint from disk."""
@@ -278,9 +280,9 @@ def main():
         import os
         os.makedirs(args.out_dir, exist_ok=True)
         
-        out_embeddings = os.path.join(args.out_dir, "desi_embeddings.npy")
-        out_targetids = os.path.join(args.out_dir, "desi_targetids.npy")
-        out_redshifts = os.path.join(args.out_dir, "desi_redshifts.npy")
+        out_embeddings = os.path.join(args.out_dir, "desi_embeddings_230k.npy")
+        out_targetids = os.path.join(args.out_dir, "desi_targetids_230k.npy")
+        out_redshifts = os.path.join(args.out_dir, "desi_redshifts_230k.npy")
         
         print(f"\nSaving embeddings to: {out_embeddings}")
         np.save(out_embeddings, embeddings)
