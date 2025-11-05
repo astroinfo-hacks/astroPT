@@ -13,6 +13,7 @@ import argparse
 import os
 import time
 from contextlib import nullcontext
+import glob
 from dataclasses import dataclass
 from typing import Any
 
@@ -83,6 +84,7 @@ class TrainingConfig:
     val_fraction: float = 0.1
     test_fraction: float = 0.1
     split_seed: int = 42
+    auto_resume: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +124,8 @@ def parse_args() -> TrainingConfig:
     parser.add_argument("--val-fraction", type=float, default=TrainingConfig.val_fraction)
     parser.add_argument("--test-fraction", type=float, default=TrainingConfig.test_fraction)
     parser.add_argument("--split-seed", type=int, default=TrainingConfig.split_seed)
+    parser.add_argument("--auto-resume", dest="auto_resume", action="store_true", default=TrainingConfig.auto_resume)
+    parser.add_argument("--no-auto-resume", dest="auto_resume", action="store_false")
     args = parser.parse_args()
 
     config = TrainingConfig()
@@ -142,6 +146,7 @@ def parse_args() -> TrainingConfig:
     config.val_fraction = args.val_fraction
     config.test_fraction = args.test_fraction
     config.split_seed = args.split_seed
+    config.auto_resume = args.auto_resume
     return config
 
 
@@ -160,6 +165,16 @@ def cleanup_wandb() -> None:
     """Ensure WANDB run is closed cleanly."""
     if _WANDB_AVAILABLE and wandb.run is not None:
         wandb.finish()
+
+
+def find_latest_checkpoint(out_dir: str) -> str | None:
+    """Return the most recent checkpoint path if any exist."""
+    pattern = os.path.join(out_dir, "ckpt_*.pt")
+    candidates = glob.glob(pattern)
+    if not candidates:
+        return None
+    candidates.sort(key=os.path.getmtime)
+    return candidates[-1]
 
 
 def setup_ddp(config: TrainingConfig) -> tuple[bool, int, int, torch.device]:
@@ -487,6 +502,23 @@ def main() -> None:
     )
     # Instantiate the AstroPT transformer and move it onto the worker's device.
     model = GPT(gpt_config, modality_registry)
+
+    resume_iter = 0
+    resume_best_val = float("inf")
+    resume_optimizer_state = None
+    if config.auto_resume:
+        latest_ckpt = find_latest_checkpoint(config.out_dir)
+        if latest_ckpt is not None and os.path.isfile(latest_ckpt):
+            if master_process:
+                print(f"Resuming from checkpoint: {latest_ckpt}")
+            checkpoint = torch.load(latest_ckpt, map_location="cpu", weights_only=False)
+            model.load_state_dict(checkpoint["model"])
+            resume_iter = checkpoint.get("iter_num", 0)
+            resume_best_val = checkpoint.get("best_val_loss", float("inf"))
+            resume_optimizer_state = checkpoint.get("optimizer")
+        elif master_process and config.auto_resume:
+            print("No checkpoint found; starting from scratch.")
+
     model = model.to(device)
     if config.compile:
         # torch.compile can fuse kernels for sizeable speed-ups on modern GPUs.
@@ -505,6 +537,14 @@ def main() -> None:
         device_type=device.type,
     )
 
+    if resume_optimizer_state is not None:
+        optimizer.load_state_dict(resume_optimizer_state)
+        # Ensure optimizer tensors are on the correct device after loading.
+        for state in optimizer.state.values():
+            for key, value in state.items():
+                if isinstance(value, torch.Tensor):
+                    state[key] = value.to(device)
+
     dtype_map = {
         "float32": torch.float32,
         "bfloat16": torch.bfloat16,
@@ -522,14 +562,17 @@ def main() -> None:
 
     maybe_init_wandb(config, config.wandb_run_name)
 
-    best_val_loss = float("inf")
-    iter_num = 0
+    best_val_loss = resume_best_val
+    iter_num = resume_iter
     leftover_tokens = 0
     loss_meter = 0.0
     start_time = time.time()
 
     # We track a logical epoch counter so DDP samplers reshuffle between passes.
-    epoch = 0
+    try:
+        epoch = iter_num // len(train_loader)
+    except TypeError:
+        epoch = 0
     while iter_num < config.max_iters:
         if ddp:
             assert isinstance(train_loader.sampler, DistributedSampler)
