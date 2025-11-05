@@ -60,6 +60,9 @@ from typing import Any
 
 import torch
 import torch.nn.functional as F
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 from torch.distributed import destroy_process_group, init_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
@@ -716,6 +719,101 @@ def main() -> None:
                 val_loss = run_eval(val_loader)
                 if master_process:
                     print(f"[eval] iter {iter_num} | val loss {val_loss:.4f}")
+
+                    loss_path = os.path.join(config.out_dir, "loss.txt")
+                    log_header = "iter_num,train_loss,val_loss,lr\n"
+                    train_loss_value = loss_meter / max(1, config.log_interval)
+                    with open(loss_path, "a") as loss_file:
+                        if loss_file.tell() == 0:
+                            loss_file.write(log_header)
+                        loss_file.write(
+                            f"{iter_num},{train_loss_value:.6f},{val_loss:.6f},{optimizer.param_groups[0]['lr']:.6e}\n"
+                        )
+
+                    if os.path.exists(loss_path):
+                        loss_df = pd.read_csv(loss_path)
+                        if len(loss_df) > 1:
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(loss_df["iter_num"], loss_df["train_loss"], label="train")
+                            ax.plot(loss_df["iter_num"], loss_df["val_loss"], label="val")
+                            ax.set_yscale("log")
+                            ax.set_xlabel("iteration")
+                            ax.set_ylabel("loss")
+                            ax.legend()
+                            ax.grid(True, alpha=0.3)
+                            fig.tight_layout()
+                            fig.savefig(os.path.join(config.out_dir, "loss.png"), dpi=150)
+                            plt.close(fig)
+
+                    if val_dataset is not None:
+                        sample_loader = DataLoader(
+                            val_dataset,
+                            batch_size=min(4, config.batch_size),
+                            shuffle=False,
+                            num_workers=0,
+                            collate_fn=spectra_collate,
+                        )
+                        try:
+                            sample_batch = next(iter(sample_loader))
+                        except StopIteration:
+                            sample_batch = None
+                        if sample_batch is not None:
+                            sample_tokens = prepare_spectra_batch(
+                                sample_batch,
+                                patch_size=config.patch_size,
+                                block_size=config.block_size,
+                                device=device,
+                                target_dtype=target_dtype,
+                            )
+                            if sample_tokens is not None:
+                                sample_inputs = sample_tokens["X"]
+                                sample_targets = sample_tokens["Y"]
+                                eval_ctx = (
+                                    torch.amp.autocast(device_type=device.type, dtype=target_dtype)
+                                    if use_amp
+                                    else nullcontext()
+                                )
+                                with torch.no_grad():
+                                    with eval_ctx:
+                                        preds, _ = model(sample_inputs, targets=sample_targets)
+                                preds_tensor = preds["spectra"].detach().cpu()
+                                target_tensor = sample_targets["spectra"].detach().cpu()
+                                num_examples = min(4, preds_tensor.size(0))
+                                if num_examples > 0:
+                                    fig, axes = plt.subplots(
+                                        num_examples,
+                                        1,
+                                        figsize=(10, 3 * num_examples),
+                                        sharex=True,
+                                    )
+                                    if num_examples == 1:
+                                        axes = [axes]
+                                    meta = sample_tokens.get("meta", {})
+                                    target_ids = meta.get("targetid")
+                                    for idx in range(num_examples):
+                                        pred_seq = preds_tensor[idx].reshape(-1).numpy()
+                                        target_seq = target_tensor[idx].reshape(-1).numpy()
+                                        x = np.arange(target_seq.shape[0])
+                                        axes[idx].plot(x, target_seq, label="target", color="tab:blue")
+                                        axes[idx].plot(x, pred_seq, label="recon", color="tab:orange", alpha=0.8)
+                                        axes[idx].set_ylabel("flux")
+                                        label = (
+                                            f"targetid={target_ids[idx]}" if target_ids is not None else "sample"
+                                        )
+                                        axes[idx].set_title(label)
+                                        axes[idx].grid(True, alpha=0.3)
+                                        axes[idx].legend()
+                                    axes[-1].set_xlabel("spectral pixel")
+                                    fig.tight_layout()
+                                    recon_path = os.path.join(
+                                        config.out_dir,
+                                        f"recon_{model_tag}_{run_stamp}_iter{iter_num:06d}.png",
+                                    )
+                                    fig.savefig(recon_path, dpi=150)
+                                    if config.log_via_wandb:
+                                        wandb.log({"reconstruction": wandb.Image(recon_path)}, step=iter_num)
+                                    plt.close(fig)
+
                     if config.log_via_wandb:
                         wandb.log({"val/loss": val_loss}, step=iter_num)
                     if val_loss < best_val_loss or config.always_save_checkpoint:
