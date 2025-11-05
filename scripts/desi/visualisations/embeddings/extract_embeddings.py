@@ -316,10 +316,11 @@ def main():
     np.save(args.out_embeddings, embeddings)
     
     print(f"Saving target IDs to: {args.out_targetids}")
-    np.save(args.out_targetids, np.array(target_ids))
+    # CRITICAL: Save as int64 to preserve full precision of TARGETIDs
+    np.save(args.out_targetids, np.array(target_ids, dtype=np.int64))
     
     print(f"Saving redshifts to: {args.out_redshifts}")
-    np.save(args.out_redshifts, np.array(redshifts))
+    np.save(args.out_redshifts, np.array(redshifts, dtype=np.float32))
     
     print("\n✓ Done!")
 
