@@ -276,6 +276,12 @@ def main():
         help="Maximum number of batches to process (for testing)",
     )
     parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Maximum number of samples to process (for testing). Overrides --max-batches if set.",
+    )
+    parser.add_argument(
         "--out-embeddings",
         default="./scripts/desi/visualisations/embeddings/desi_embeddings.npy",
         help="Output file for embeddings",
@@ -300,6 +306,13 @@ def main():
     dataset = DESISpectraDataset(data_dir=args.data_dir, split=args.split)
     print(f"Dataset size: {len(dataset)} spectra")
     
+    # Apply max_samples limit if specified
+    if args.max_samples is not None:
+        from torch.utils.data import Subset
+        n_samples = min(args.max_samples, len(dataset))
+        dataset = Subset(dataset, range(n_samples))
+        print(f"Limiting to first {n_samples} samples ({n_samples/len(dataset)*100:.1f}% of dataset)")
+    
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -308,6 +321,11 @@ def main():
         collate_fn=spectra_collate,
         pin_memory=(args.device == "cuda"),
     )
+    
+    # Calculate max_batches from max_samples if needed
+    max_batches = args.max_batches
+    if args.max_samples is not None and max_batches is None:
+        max_batches = (args.max_samples + args.batch_size - 1) // args.batch_size
     
     # Extract embeddings
     print("\nExtracting embeddings...")
@@ -318,7 +336,7 @@ def main():
         args.patch_size,
         config.block_size,
         args.device,
-        args.max_batches,
+        max_batches,
     )
     
     # Save to disk

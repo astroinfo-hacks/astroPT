@@ -233,6 +233,8 @@ def main():
     parser.add_argument("--patch-size", type=int, default=10)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--max-batches", type=int, default=None)
+    parser.add_argument("--max-samples", type=int, default=None, 
+                        help="Maximum number of samples to process (for testing)")
     parser.add_argument("--out-dir", default="./scripts/desi/visualisations/embeddings/")
     args = parser.parse_args()
 
@@ -247,6 +249,13 @@ def main():
     print(f"\nLoading dataset from: {args.data_dir}")
     dataset = DESISpectraDataset(data_dir=args.data_dir)
     print(f"Dataset size: {len(dataset)} spectra")
+    
+    # Apply max_samples limit if specified
+    if args.max_samples is not None:
+        from torch.utils.data import Subset
+        n_samples = min(args.max_samples, len(dataset))
+        dataset = Subset(dataset, range(n_samples))
+        print(f"Limiting to first {n_samples} samples ({n_samples/len(dataset.dataset)*100:.1f}% of full dataset)")
     
     # IMPORTANT: Start with num_workers=0 to avoid multiprocessing issues
     print(f"\nCreating DataLoader (num_workers={args.num_workers})...")
@@ -263,6 +272,11 @@ def main():
         pin_memory=(args.device == "cuda"),
     )
     
+    # Calculate max_batches from max_samples if needed
+    max_batches = args.max_batches
+    if args.max_samples is not None and max_batches is None:
+        max_batches = (args.max_samples + args.batch_size - 1) // args.batch_size
+    
     # Extract embeddings with diagnostics
     print("\nExtracting embeddings...")
     print(f"Using block_size={config.block_size} (from checkpoint)")
@@ -272,7 +286,7 @@ def main():
         args.patch_size,
         config.block_size,
         args.device,
-        args.max_batches,
+        max_batches,
     )
     
     # Only save if extraction was successful
