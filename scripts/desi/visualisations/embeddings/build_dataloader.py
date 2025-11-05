@@ -14,7 +14,7 @@ from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
     spectra_collate,
 )
 
-DEFAULT_DATA_DIR = "/pbs/home/a/astroinfo08/astroinfo2025/data/astroPT_desi_dataset"
+DEFAULT_DATA_DIR = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset/"
 
 
 def main():

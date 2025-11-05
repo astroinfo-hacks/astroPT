@@ -23,7 +23,7 @@ from datasets import Dataset, concatenate_datasets, load_from_disk
 from torch.utils.data import DataLoader
 
 
-DEFAULT_DATA_DIR = "/pbs/home/a/astroinfo08/astroinfo2025/data/astroPT_desi_dataset"
+DEFAULT_DATA_DIR = "/pbs/home/a//astroinfo2025/data/astroPT_desi_dataset"
 
 
 def _load_local_hf_dataset(data_dir: str, split: str | None) -> Dataset:
