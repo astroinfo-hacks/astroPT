@@ -16,8 +16,8 @@ python scripts/train_desi_spectra.py --batch-size 16 --compile
 Multi-GPU training (2 GPUs):
 ---------------------------
 torchrun --standalone --nproc_per_node=2 scripts/train_desi_spectra.py \
-    --batch-size 16 \
-    --grad-accum 4 \
+    --batch-size 32 \
+    --grad-accum 2 \
     --compile
 
 CONFIGURATION:
@@ -85,8 +85,8 @@ from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
 class TrainingConfig:
     """Container that gathers together the main hyperparameters."""
 
-    out_dir: str = "/pbs/throng/training/astroinfo2025/work/mhuertas/logs/astropt_desi_spectra"
-    data_dir: str = "/pbs/home/a/astroinfo08/astroinfo2025/data/astroPT_desi_dataset"
+    out_dir: str = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra"
+    data_dir: str = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset" 
     train_split: str | None = None
     val_split: str | None = None
     test_split: str | None = None
