@@ -18,8 +18,7 @@ from euclid_desi_dataset.desi_spectrum_dataloader import (
 
 
 DEFAULT_DATA_DIR = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset"
-DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2/ckpt_best_L12_H12_E768_BS256_20251105-105119.pt"
-
+DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2/ckpt_best_L12_H12_E768_BS256_20251105-124945.pt"
 
 def load_checkpoint(checkpoint_path: str, device: str, patch_size: int = 256):
     """Load model checkpoint from disk."""
