@@ -557,7 +557,15 @@ def main() -> None:
             if master_process:
                 print(f"Resuming from checkpoint: {latest_ckpt}")
             checkpoint = torch.load(latest_ckpt, map_location="cpu", weights_only=False)
-            model.load_state_dict(checkpoint["model"])
+            state_dict = checkpoint["model"]
+            unwanted_prefix = "_orig_mod."
+            if any(k.startswith(unwanted_prefix) for k in state_dict.keys()):
+                cleaned_state = {}
+                for key, value in state_dict.items():
+                    new_key = key[len(unwanted_prefix):] if key.startswith(unwanted_prefix) else key
+                    cleaned_state[new_key] = value
+                state_dict = cleaned_state
+            model.load_state_dict(state_dict)
             resume_iter = checkpoint.get("iter_num", 0)
             resume_best_val = checkpoint.get("best_val_loss", float("inf"))
             resume_optimizer_state = checkpoint.get("optimizer")
