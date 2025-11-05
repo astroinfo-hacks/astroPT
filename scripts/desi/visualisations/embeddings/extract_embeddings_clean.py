@@ -78,18 +78,36 @@ def find_final_norm(model):
     return candidate
 
 
-def prepare_spectra_batch(batch, patch_size: int, device: str):
-    """Prepare a batch of spectra for model input."""
+def prepare_spectra_batch(batch, patch_size: int, block_size: int, device: str):
+    """Prepare a batch of spectra for model input.
+    
+    Args:
+        batch: Batch dictionary from dataloader
+        patch_size: Size of each patch
+        block_size: Maximum sequence length (number of patches)
+        device: Device to place tensors on
+    
+    Returns:
+        Tuple of (inputs_dict, target_ids, redshifts)
+    """
     flux = batch["flux"].to(device)
     B, L = flux.shape
     
+    # Pad to be divisible by patch_size
     pad = (patch_size - (L % patch_size)) % patch_size
     if pad:
         flux = F.pad(flux, (0, pad))
     
+    # Reshape into patches
     patches = flux.view(B, -1, patch_size)
     num_patches = patches.size(1)
     
+    # CRITICAL: Truncate to block_size to match training
+    if block_size > 0 and num_patches > block_size:
+        num_patches = block_size
+        patches = patches[:, :num_patches]
+    
+    # Create position indices
     positions = torch.arange(num_patches, device=device, dtype=torch.long)
     positions = positions.unsqueeze(0).expand(B, -1)
     
@@ -108,10 +126,20 @@ def extract_embeddings_with_diagnostics(
     model,
     dataloader,
     patch_size: int,
+    block_size: int,
     device: str,
     max_batches: int = None,
 ):
-    """Extract embeddings with duplication checks."""
+    """Extract embeddings with duplication checks.
+    
+    Args:
+        model: Trained model
+        dataloader: DataLoader for spectra
+        patch_size: Size of each patch
+        block_size: Maximum sequence length
+        device: Device to run on
+        max_batches: Optional limit on number of batches
+    """
     ln_final = find_final_norm(model)
     if ln_final is None:
         raise ValueError("Could not find final normalization layer in model")
@@ -140,7 +168,7 @@ def extract_embeddings_with_diagnostics(
                     break
                 
                 inputs, target_ids, redshifts = prepare_spectra_batch(
-                    batch, patch_size, device
+                    batch, patch_size, block_size, device
                 )
                 
                 # Check for duplicates in this batch
@@ -236,10 +264,12 @@ def main():
     
     # Extract embeddings with diagnostics
     print("\nExtracting embeddings...")
+    print(f"Using block_size={config.block_size} (from checkpoint)")
     embeddings, target_ids, redshifts = extract_embeddings_with_diagnostics(
         model,
         dataloader,
         args.patch_size,
+        config.block_size,
         args.device,
         args.max_batches,
     )

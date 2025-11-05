@@ -100,12 +100,13 @@ def find_final_norm(model):
     return candidate
 
 
-def prepare_spectra_batch(batch, patch_size: int, device: str):
+def prepare_spectra_batch(batch, patch_size: int, block_size: int, device: str):
     """Prepare a batch of spectra for model input.
     
     Args:
         batch: Dictionary from spectra_collate with 'flux', 'targetid', etc.
         patch_size: Patch size for tokenization
+        block_size: Maximum sequence length (number of patches)
         device: Device to move tensors to
     
     Returns:
@@ -122,6 +123,11 @@ def prepare_spectra_batch(batch, patch_size: int, device: str):
     # Reshape into patches: (B, L) -> (B, num_patches, patch_size)
     patches = flux.view(B, -1, patch_size)
     num_patches = patches.size(1)
+    
+    # CRITICAL: Truncate to block_size to match training
+    if block_size > 0 and num_patches > block_size:
+        num_patches = block_size
+        patches = patches[:, :num_patches]
     
     # Create position indices for each patch
     positions = torch.arange(num_patches, device=device, dtype=torch.long)
@@ -144,6 +150,7 @@ def extract_embeddings(
     model,
     dataloader,
     patch_size: int,
+    block_size: int,
     device: str,
     max_batches: int = None,
 ):
@@ -153,6 +160,7 @@ def extract_embeddings(
         model: Trained AstroPT model
         dataloader: DataLoader yielding spectra batches
         patch_size: Patch size for tokenization
+        block_size: Maximum sequence length (number of patches)
         device: Device for inference
         max_batches: Maximum number of batches to process (None = all)
     
@@ -188,7 +196,7 @@ def extract_embeddings(
                 
                 # Prepare input
                 inputs, target_ids, redshifts = prepare_spectra_batch(
-                    batch, patch_size, device
+                    batch, patch_size, block_size, device
                 )
                 
                 # Forward pass (triggers hook)
@@ -303,10 +311,12 @@ def main():
     
     # Extract embeddings
     print("\nExtracting embeddings...")
+    print(f"Using block_size={config.block_size} (from checkpoint)")
     embeddings, target_ids, redshifts = extract_embeddings(
         model,
         dataloader,
         args.patch_size,
+        config.block_size,
         args.device,
         args.max_batches,
     )
