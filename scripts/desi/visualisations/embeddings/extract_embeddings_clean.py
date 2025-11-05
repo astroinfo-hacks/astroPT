@@ -18,7 +18,7 @@ from euclid_desi_dataset.desi_spectrum_dataloader import (
 
 
 DEFAULT_DATA_DIR = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset"
-DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra/ckpt.pt"
+DEFAULT_CHECKPOINT = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra/ckpt_best_L12_H12_E768_BS256_20251105-105119.pt"
 
 
 def load_checkpoint(checkpoint_path: str, device: str, patch_size: int = 256):
@@ -201,7 +201,7 @@ def main():
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=0)  # Changed default to 0!
-    parser.add_argument("--patch-size", type=int, default=256)
+    parser.add_argument("--patch-size", type=int, default=10)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--max-batches", type=int, default=None)
     parser.add_argument("--out-dir", default="./scripts/desi/visualisations/embeddings/")
