@@ -1,0 +1,91 @@
+[workspace]
+name = "astropt-desi"
+version = "0.1.0"
+description = "AstroPT training environment – DESI spectra"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# ---------------------------------------------------------------------------
+# Runtime dependencies
+# ---------------------------------------------------------------------------
+[dependencies]
+python = "3.12"
+
+# Scientific stack
+numpy = ">=1.26"
+pandas = ">=2.2"
+matplotlib = ">=3.9"
+scipy = ">=1.14"
+scikit-learn = ">=1.5"
+astropy = ">=6.0"
+h5py = ">=3.12"
+tqdm = ">=4.67"
+einops = ">=0.8"
+fsspec = ">=2023.1,<2026"
+
+[pypi-options]
+extra-index-urls = ["https://download.pytorch.org/whl/cu124"]
+index-strategy = "unsafe-best-match"
+
+[pypi-dependencies]
+# PyTorch cu124 wheels
+torch = "==2.4.0"
+torchvision = "==0.19.0"
+torchaudio = "==2.4.0"
+
+# HuggingFace / data
+datasets = ">=3.1.0"
+multiprocess = ">=0.70.16"
+tiktoken = ">=0.8.0"
+wandb = ">=0.18.7"
+transformers = ">=4.52"
+accelerate = ">=1.8"
+peft = ">=0.15"
+loralib = "*"
+traces = ">=0.6.4"
+
+# install the astropt package from the local submodule in editable mode
+astropt = { path = ".", editable = true }
+
+# ---------------------------------------------------------------------------
+# Tasks
+# ---------------------------------------------------------------------------
+[tasks]
+
+# ── Full multi-GPU command (requires 2+ GPUs) ────────────────────────────────
+train-multigpu = { cmd = """
+torchrun \
+  --standalone \
+  --nproc_per_node=2 \
+  scripts/train_desi_spectra.py \
+  --batch-size 32 \
+  --grad-accum 2 \
+  --compile
+""", cwd = ".", env = { PYTHONPATH = "." } }
+
+# ── Adapted for this laptop (1× T600 4 GB, 12-core CPU, 32 GB RAM) ──────────
+train-laptop = { cmd = """
+torchrun \
+  --standalone \
+  --nproc_per_node=1 \
+  scripts/train_desi_spectra.py \
+  --batch-size 8 \
+  --grad-accum 4 \
+  --num-workers 4
+""", cwd = ".", env = { PYTHONPATH = ".", PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True" } }
+
+# ── Quick smoke-test (1 iteration, no checkpoint) ────────────────────────────
+# Uses a tiny model (4 layers, 4 heads, 256 embed) to fit within 4 GB VRAM.
+train-debug = { cmd = """
+torchrun \
+  --standalone \
+  --nproc_per_node=1 \
+  scripts/train_desi_spectra.py \
+  --batch-size 2 \
+  --grad-accum 1 \
+  --num-workers 0 \
+  --block-size 64 \
+  --n-layer 4 \
+  --n-head 4 \
+  --n-embd 256
+""", cwd = ".", env = { PYTHONPATH = ".", PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True" } }

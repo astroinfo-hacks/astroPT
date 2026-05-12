@@ -76,10 +76,10 @@ except ImportError:  # pragma: no cover - optional dependency
     _WANDB_AVAILABLE = False
 
 from astropt.model import GPT, GPTConfig, ModalityConfig, ModalityRegistry
-# scripts/euclid_desi_dataset/desi_spectrum_dataloader.py 
-from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
-    DESISpectraDataset,
-    spectra_collate,
+# scripts/euclid_desi_dataset/multimodal_dataloader.py
+from scripts.euclid_desi_dataset.multimodal_dataloader import (
+    EuclidDESIMultimodalDataset,
+    multimodal_collate_fn,
 )
 
 
@@ -90,8 +90,8 @@ from scripts.euclid_desi_dataset.desi_spectrum_dataloader import (
 class TrainingConfig:
     """Container that gathers together the main hyperparameters."""
 
-    out_dir: str = "/pbs/throng/training/astroinfo2025/work/jzoubian/logs/astropt_desi_spectra_2"
-    data_dir: str = "/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset" 
+    out_dir: str = "/home/zoubian/Workspace/AstroInfo/2025/logs/astroPT_euclid_Q1_desi_dr1_dataset"
+    data_dir: str = "/home/zoubian/Workspace/AstroInfo/2025/dataset/astroPT_euclid_Q1_desi_dr1_dataset" 
     train_split: str | None = None
     val_split: str | None = None
     test_split: str | None = None
@@ -156,6 +156,9 @@ def parse_args() -> TrainingConfig:
     parser.add_argument("--num-workers", type=int, default=TrainingConfig.num_workers)
     parser.add_argument("--block-size", type=int, default=TrainingConfig.block_size)
     parser.add_argument("--patch-size", type=int, default=TrainingConfig.patch_size)
+    parser.add_argument("--n-layer", type=int, default=TrainingConfig.n_layer)
+    parser.add_argument("--n-head", type=int, default=TrainingConfig.n_head)
+    parser.add_argument("--n-embd", type=int, default=TrainingConfig.n_embd)
     parser.add_argument("--compile", action="store_true", default=False)
     parser.add_argument("--no-compile", dest="compile", action="store_false")
     parser.add_argument(
@@ -184,6 +187,9 @@ def parse_args() -> TrainingConfig:
     config.num_workers = args.num_workers
     config.block_size = args.block_size
     config.patch_size = args.patch_size
+    config.n_layer = args.n_layer
+    config.n_head = args.n_head
+    config.n_embd = args.n_embd
     config.compile = args.compile
     config.log_via_wandb = args.log_wandb and _WANDB_AVAILABLE
     config.wandb_project = args.wandb_project
@@ -254,7 +260,9 @@ def prepare_spectra_batch(
     pad incomplete windows, and trim to `block_size` tokens so that the GPT
     model receives aligned inputs and position indices.
     """
-    flux = batch["flux"].to(device=device, dtype=torch.float32)
+    if "spectra" not in batch:
+        return None
+    flux = batch["spectra"].to(device=device, dtype=torch.float32)
     B, L = flux.shape
     pad = (patch_size - (L % patch_size)) % patch_size
     if pad:
@@ -281,9 +289,9 @@ def prepare_spectra_batch(
         return None
 
     meta_fields = {}
-    for key in ("targetid", "redshift", "norm"):
-        if key in batch:
-            meta_fields[key] = batch[key]
+    for src_key, dst_key in (("spectrum_targetids", "targetid"), ("spectrum_redshifts", "redshift")):
+        if src_key in batch:
+            meta_fields[dst_key] = batch[src_key]
 
     return {
         "X": {
@@ -299,80 +307,27 @@ def prepare_spectra_batch(
 
 def prepare_dataset_splits(
     config: TrainingConfig, master_process: bool
-) -> tuple[DESISpectraDataset, DESISpectraDataset | None, DESISpectraDataset | None]:
-    """Load the DESI dataset and prepare train/val/test splits."""
+) -> tuple[EuclidDESIMultimodalDataset, EuclidDESIMultimodalDataset | None, EuclidDESIMultimodalDataset | None]:
+    """Load the Euclid+DESI dataset and prepare train/val/test splits."""
 
-    if config.val_fraction + config.test_fraction >= 1.0:
-        raise ValueError("val_fraction + test_fraction must be < 1.0")
+    train_split = config.train_split or "train"
+    val_split = config.val_split
+    test_split = config.test_split
 
-    if config.train_split and config.val_split and config.test_split:
-        train_dataset = DESISpectraDataset(
-            data_dir=config.data_dir,
-            split=config.train_split,
-        )
-        val_dataset = DESISpectraDataset(
-            data_dir=config.data_dir,
-            split=config.val_split,
-        )
-        test_dataset = DESISpectraDataset(
-            data_dir=config.data_dir,
-            split=config.test_split,
-        )
-        total = len(train_dataset) + len(val_dataset) + len(test_dataset)
-    else:
-        base_dataset = DESISpectraDataset(
-            data_dir=config.data_dir,
-            split=config.train_split,
-        )
-        hf_dataset = base_dataset.dataset
-        total = len(hf_dataset)
-        if total == 0:
-            raise RuntimeError("Loaded dataset is empty; cannot create splits.")
-
-        val_frac = config.val_fraction
-        test_frac = config.test_fraction
-        temp_frac = val_frac + test_frac
-
-        if temp_frac > 0:
-            split_dict = hf_dataset.train_test_split(
-                test_size=temp_frac,
-                seed=config.split_seed,
-            )
-            train_hf = split_dict["train"]
-            temp_hf = split_dict["test"]
-
-            if test_frac > 0:
-                if temp_frac == 0:
-                    raise ValueError("temp_frac is zero despite non-zero test_frac")
-                relative_test = test_frac / temp_frac
-                val_test_split = temp_hf.train_test_split(
-                    test_size=relative_test,
-                    seed=config.split_seed,
-                )
-                val_hf = val_test_split["train"]
-                test_hf = val_test_split["test"]
-            else:
-                val_hf = temp_hf
-                test_hf = None
-        else:
-            train_hf = hf_dataset
-            val_hf = None
-            test_hf = None
-
-        train_dataset = DESISpectraDataset(
-            data_dir=config.data_dir,
-            hf_dataset=train_hf,
-        )
-        val_dataset = (
-            DESISpectraDataset(data_dir=config.data_dir, hf_dataset=val_hf)
-            if val_hf is not None
-            else None
-        )
-        test_dataset = (
-            DESISpectraDataset(data_dir=config.data_dir, hf_dataset=test_hf)
-            if test_hf is not None
-            else None
-        )
+    train_dataset = EuclidDESIMultimodalDataset(
+        data_dir=config.data_dir,
+        split=train_split,
+    )
+    val_dataset = (
+        EuclidDESIMultimodalDataset(data_dir=config.data_dir, split=val_split)
+        if val_split is not None
+        else None
+    )
+    test_dataset = (
+        EuclidDESIMultimodalDataset(data_dir=config.data_dir, split=test_split)
+        if test_split is not None
+        else None
+    )
     if master_process:
         train_len = len(train_dataset)
         val_len = len(val_dataset) if val_dataset is not None else 0
@@ -385,9 +340,9 @@ def prepare_dataset_splits(
 
 
 def create_dataloaders(
-    train_dataset: DESISpectraDataset,
-    val_dataset: DESISpectraDataset | None,
-    test_dataset: DESISpectraDataset | None,
+    train_dataset: EuclidDESIMultimodalDataset,
+    val_dataset: EuclidDESIMultimodalDataset | None,
+    test_dataset: EuclidDESIMultimodalDataset | None,
     config: TrainingConfig,
     ddp: bool,
     world_size: int,
@@ -426,7 +381,7 @@ def create_dataloaders(
         batch_size=config.batch_size,
         shuffle=(not ddp),
         num_workers=config.num_workers,
-        collate_fn=spectra_collate,
+        collate_fn=multimodal_collate_fn,
         pin_memory=True,
         drop_last=True,
         sampler=train_sampler,
@@ -437,7 +392,7 @@ def create_dataloaders(
             batch_size=config.batch_size,
             shuffle=False,
             num_workers=config.num_workers,
-            collate_fn=spectra_collate,
+            collate_fn=multimodal_collate_fn,
             pin_memory=True,
             drop_last=False,
             sampler=val_sampler,
@@ -451,7 +406,7 @@ def create_dataloaders(
             batch_size=config.batch_size,
             shuffle=False,
             num_workers=config.num_workers,
-            collate_fn=spectra_collate,
+            collate_fn=multimodal_collate_fn,
             pin_memory=True,
             drop_last=False,
             sampler=test_sampler,
@@ -759,7 +714,7 @@ def main() -> None:
                             batch_size=min(4, config.batch_size),
                             shuffle=False,
                             num_workers=0,
-                            collate_fn=spectra_collate,
+                            collate_fn=multimodal_collate_fn,
                         )
                         try:
                             sample_batch = next(iter(sample_loader))

@@ -85,7 +85,6 @@ class EuclidDESIMultimodalDataset(Dataset):
                 spectrum_flux = spectrum_flux / (spectrum_flux.std() + 1e-8)
         
         return {
-            'object_id': sample['object_id'],
             'targetid': sample['targetid'],
             'redshift': sample['redshift'],
             'image': rgb_image,  # Shape: (C, H, W)
@@ -113,19 +112,16 @@ def multimodal_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     collated = {}
     if image_samples:
         collated['images'] = torch.stack([s['image'] for s in image_samples])
-        collated['image_object_ids'] = [s['object_id'] for s in image_samples]
         collated['image_targetids'] = torch.tensor([s['targetid'] for s in image_samples])
         collated['image_redshifts'] = torch.tensor([s['redshift'] for s in image_samples])
     
     # Collate spectra
     if spectrum_samples:
         collated['spectra'] = torch.stack([s['spectrum'] for s in spectrum_samples])
-        collated['spectrum_object_ids'] = [s['object_id'] for s in spectrum_samples]
         collated['spectrum_targetids'] = torch.tensor([s['targetid'] for s in spectrum_samples])
         collated['spectrum_redshifts'] = torch.tensor([s['redshift'] for s in spectrum_samples])
     
     # Also include all metadata for reference
-    collated['all_object_ids'] = [s['object_id'] for s in batch]
     collated['all_targetids'] = torch.tensor([s['targetid'] for s in batch])
     collated['all_redshifts'] = torch.tensor([s['redshift'] for s in batch])
     
@@ -223,7 +219,7 @@ if __name__ == "__main__":
     print(f"Sample keys: {sample.keys()}")
     print(f"Image shape: {sample['image'].shape if sample['image'] is not None else 'None'}")
     print(f"Spectrum shape: {sample['spectrum'].shape if sample['spectrum'] is not None else 'None'}")
-    print(f"Object ID: {sample['object_id']}")
+    print(f"Target ID: {sample['targetid']}")
     print(f"Redshift: {sample['redshift']}")
     
     # Test dataloader
