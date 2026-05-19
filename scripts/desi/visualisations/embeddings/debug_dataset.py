@@ -1,7 +1,7 @@
 """Debug script to check for duplicate TARGETIDs in the DESI dataset."""
 
 import sys
-sys.path.insert(0, '/home/zoubian/Workspace/AstroInfo/astroPT')
+sys.path.insert(0, '/sps/euclid/Users/zoubian/datasets/astroPT')
 
 from scripts.euclid_desi_dataset.desi_spectrum_dataloader import DESISpectraDataset
 import numpy as np
@@ -10,7 +10,7 @@ from collections import Counter
 # Load dataset
 print("Loading dataset...")
 dataset = DESISpectraDataset(
-    data_dir="/pbs/throng/training/astroinfo2025/data/astroPT_desi_dataset"
+    data_dir="/sps/euclid/Users/zoubian/datasets/astroPT_euclid_Q1_desi_dr1_dataset"
 )
 
 print(f"Dataset size: {len(dataset)}")

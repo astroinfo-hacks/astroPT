@@ -73,25 +73,33 @@ def load_checkpoint(checkpoint_path: str, device: str):
         attn_type="causal",
     )
     
-    # Create modality registry (use balanced weights from observed frame training)
-    modalities = [
-        ModalityConfig(
+    # Detect which modalities are actually present in the checkpoint state dict
+    state_dict_keys = set(checkpoint.get('model', checkpoint).keys())
+    has_images = any(k.startswith('encoders.images') or k.startswith('_orig_mod.encoders.images') for k in state_dict_keys)
+    has_spectra = any(k.startswith('encoders.spectra') or k.startswith('_orig_mod.encoders.spectra') for k in state_dict_keys)
+    print(f"Detected modalities in checkpoint — images: {has_images}, spectra: {has_spectra}")
+
+    modalities = []
+    if has_images:
+        modalities.append(ModalityConfig(
             name="images",
             input_size=image_patch_size * image_patch_size * n_chan,
             patch_size=image_patch_size,
-            loss_weight=779/196,  # From observed frame training
+            loss_weight=779/196,
             embed_pos=True,
             pos_input_size=1,
-        ),
-        ModalityConfig(
+        ))
+    if has_spectra:
+        modalities.append(ModalityConfig(
             name="spectra",
             input_size=spectrum_patch_size,
             patch_size=spectrum_patch_size,
             pos_input_size=1,
-            loss_weight=196/779,  # From observed frame training
+            loss_weight=196/779 if has_images else 1.0,
             embed_pos=True,
-        ),
-    ]
+        ))
+    if not modalities:
+        raise ValueError("Could not detect any known modalities in checkpoint state dict.")
     modality_registry = ModalityRegistry(modalities)
     
     # Create model

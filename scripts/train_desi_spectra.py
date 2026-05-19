@@ -174,6 +174,8 @@ def parse_args() -> TrainingConfig:
     parser.add_argument("--split-seed", type=int, default=TrainingConfig.split_seed)
     parser.add_argument("--auto-resume", dest="auto_resume", action="store_true", default=TrainingConfig.auto_resume)
     parser.add_argument("--no-auto-resume", dest="auto_resume", action="store_false")
+    parser.add_argument("--checkpoint-interval", type=int, default=TrainingConfig.checkpoint_interval)
+    parser.add_argument("--always-save-checkpoint", action="store_true", default=TrainingConfig.always_save_checkpoint)
     args = parser.parse_args()
 
     config = TrainingConfig()
@@ -198,6 +200,8 @@ def parse_args() -> TrainingConfig:
     config.test_fraction = args.test_fraction
     config.split_seed = args.split_seed
     config.auto_resume = args.auto_resume
+    config.checkpoint_interval = args.checkpoint_interval
+    config.always_save_checkpoint = args.always_save_checkpoint
     return config
 
 
@@ -604,7 +608,11 @@ def main() -> None:
             inputs = batch_tokens["X"]
             targets = batch_tokens["Y"]
 
-            with autocast_ctx:
+            # Suppress DDP all-reduce on accumulation steps; only sync on the last
+            # micro-step so GPUs work in parallel instead of taking turns.
+            is_last_accum = (leftover_tokens + 1) % config.gradient_accumulation_steps == 0
+            sync_ctx = nullcontext() if (not ddp or is_last_accum) else model.no_sync()
+            with sync_ctx, autocast_ctx:
                 # Forward pass returns predictions and loss; we track the loss scalar.
                 _, loss = model(inputs, targets=targets)
 
