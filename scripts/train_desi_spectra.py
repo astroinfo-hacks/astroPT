@@ -90,8 +90,8 @@ from scripts.euclid_desi_dataset.multimodal_dataloader import (
 class TrainingConfig:
     """Container that gathers together the main hyperparameters."""
 
-    out_dir: str = "/home/zoubian/Workspace/AstroInfo/2025/logs/astroPT_euclid_Q1_desi_dr1_dataset"
-    data_dir: str = "/home/zoubian/Workspace/AstroInfo/2025/dataset/astroPT_euclid_Q1_desi_dr1_dataset" 
+    out_dir: str = "/sps/euclid/Users/zoubian/logs/astroPT_euclid_Q1_desi_dr1_dataset"
+    data_dir: str = "/sps/euclid/Users/zoubian/datasets/astroPT_euclid_Q1_desi_dr1_dataset" 
     train_split: str | None = None
     val_split: str | None = None
     test_split: str | None = None
