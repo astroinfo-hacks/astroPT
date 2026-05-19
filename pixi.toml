@@ -9,7 +9,7 @@ platforms = ["linux-64"]
 # Runtime dependencies
 # ---------------------------------------------------------------------------
 [dependencies]
-python = "3.12"
+python = "3.12.*"
 
 # Scientific stack
 numpy = ">=1.26"
@@ -60,7 +60,8 @@ torchrun \
   scripts/train_desi_spectra.py \
   --batch-size 32 \
   --grad-accum 2 \
-  --compile
+  --compile \
+  --checkpoint-interval 500
 """, cwd = ".", env = { PYTHONPATH = "." } }
 
 # ── Adapted for this laptop (1× T600 4 GB, 12-core CPU, 32 GB RAM) ──────────
@@ -72,6 +73,21 @@ torchrun \
   --batch-size 8 \
   --grad-accum 4 \
   --num-workers 4
+""", cwd = ".", env = { PYTHONPATH = ".", PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True" } }
+
+# ── Single A40 (46 GB VRAM) ──────────────────────────────────────────────────
+#   Full-size model (12L/12H/768E), large batch, bfloat16 + torch.compile.
+#   Effective batch = 64 × 1 × 4 = 256.
+train-a40 = { cmd = """
+torchrun \
+  --standalone \
+  --nproc_per_node=1 \
+  scripts/train_desi_spectra.py \
+  --batch-size 64 \
+  --grad-accum 4 \
+  --num-workers 8 \
+  --block-size 256 \
+  --compile
 """, cwd = ".", env = { PYTHONPATH = ".", PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True" } }
 
 # ── Quick smoke-test (1 iteration, no checkpoint) ────────────────────────────
@@ -89,3 +105,11 @@ torchrun \
   --n-head 4 \
   --n-embd 256
 """, cwd = ".", env = { PYTHONPATH = ".", PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True" } }
+
+# ── Extract multimodal embeddings from a trained checkpoint ──────────────────
+# Usage: pixi run extract-embeddings --checkpoint /path/to/ckpt.pt
+# Optional overrides: --output-dir, --batch-size, --max-samples, --use-val
+extract-embeddings = { cmd = """
+python scripts/euclid_desi_dataset/embeddings/extract_multimodal_embeddings.py \
+  --num-workers 0
+""", cwd = ".", env = { PYTHONPATH = "." } }
