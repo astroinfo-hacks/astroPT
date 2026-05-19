@@ -117,7 +117,7 @@ def load_checkpoint(checkpoint_path: str, device: str):
     model.eval()
     
     print(f"✓ Model loaded successfully")
-    return model, gpt_config, (image_patch_size, spectrum_patch_size)
+    return model, gpt_config, (image_patch_size, spectrum_patch_size), has_images
 
 
 def find_final_norm(model):
@@ -337,8 +337,8 @@ def main():
     parser.add_argument("--output-dir", help="Output directory (default: same as checkpoint dir)")
     
     # Data configuration
-    parser.add_argument("--train-split", default="test_batch_1", help="Training split to use")
-    parser.add_argument("--val-split", default="test_batch_2", help="Validation split to use")
+    parser.add_argument("--train-split", default="train", help="Training split to use")
+    parser.add_argument("--val-split", default="test", help="Validation split to use")
     parser.add_argument("--use-val", action="store_true", help="Extract from validation split instead of training")
     
     # Processing configuration
@@ -370,7 +370,7 @@ def main():
         print("   If you see duplicates, try running with --num-workers=0")
     
     # Load model
-    model, config, (image_patch_size, spectrum_patch_size) = load_checkpoint(args.checkpoint, args.device)
+    model, config, (image_patch_size, spectrum_patch_size), has_images = load_checkpoint(args.checkpoint, args.device)
     
     # Create dataset
     print(f"\nCreating multimodal dataset...")
@@ -379,7 +379,8 @@ def main():
     dataset = EuclidDESIMultimodalDataset(
         split=split,
         image_size=224,
-        spectrum_length=7781
+        spectrum_length=7781,
+        spectra_only=(not has_images),
     )
     
     print(f"Dataset size: {len(dataset)} samples")
