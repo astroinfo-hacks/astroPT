@@ -203,9 +203,11 @@ def extract_embeddings_with_diagnostics(
                             inputs[key] = inputs[key][:, :block_size]
                             inputs[key + '_positions'] = inputs[key + '_positions'][:, :block_size]
                 
-                # Track object IDs for duplication detection
-                object_ids = batch.get('all_object_ids', [])
-                for oid in object_ids:
+                # Track object IDs for duplication detection (collate uses all_targetids)
+                target_ids = batch.get('all_targetids', [])
+                if hasattr(target_ids, 'tolist'):
+                    target_ids = target_ids.tolist()
+                for oid in target_ids:
                     seen_object_ids[oid] += 1
                 
                 # Forward pass through model
@@ -220,10 +222,13 @@ def extract_embeddings_with_diagnostics(
                 # Store results
                 all_embeddings.append(embeddings.cpu().numpy())
                 
-                # Store metadata
-                all_metadata['object_ids'].extend(batch.get('all_object_ids', []))
-                all_metadata['target_ids'].extend(batch.get('all_targetids', []))
-                all_metadata['redshifts'].extend(batch.get('all_redshifts', []))
+                # Store metadata — batch keys from multimodal_collate_fn
+                redshifts = batch.get('all_redshifts', [])
+                if hasattr(redshifts, 'tolist'):
+                    redshifts = redshifts.tolist()
+                all_metadata['object_ids'].extend(target_ids)
+                all_metadata['target_ids'].extend(target_ids)
+                all_metadata['redshifts'].extend(redshifts)
                 
                 # Track which modalities are present for each sample
                 batch_size = embeddings.shape[0]
@@ -278,9 +283,12 @@ def extract_embeddings_with_diagnostics(
     total = len(all_metadata['object_ids'])
     
     print(f"\nModality coverage:")
-    print(f"  Samples with images: {n_with_images}/{total} ({n_with_images/total*100:.1f}%)")
-    print(f"  Samples with spectra: {n_with_spectra}/{total} ({n_with_spectra/total*100:.1f}%)")
-    print(f"  Truly multimodal: {min(n_with_images, n_with_spectra)}/{total}")
+    if total > 0:
+        print(f"  Samples with images: {n_with_images}/{total} ({n_with_images/total*100:.1f}%)")
+        print(f"  Samples with spectra: {n_with_spectra}/{total} ({n_with_spectra/total*100:.1f}%)")
+        print(f"  Truly multimodal: {min(n_with_images, n_with_spectra)}/{total}")
+    else:
+        print("  (no metadata collected — check batch key names)")
     
     print("\n✓ No duplicates found - embeddings are valid!")
     
