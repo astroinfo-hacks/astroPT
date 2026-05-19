@@ -90,8 +90,8 @@ from scripts.euclid_desi_dataset.multimodal_dataloader import (
 class TrainingConfig:
     """Container that gathers together the main hyperparameters."""
 
-    out_dir: str = "/home/zoubian/Workspace/AstroInfo/2025/logs/astroPT_euclid_Q1_desi_dr1_dataset"
-    data_dir: str = "/home/zoubian/Workspace/AstroInfo/2025/dataset/astroPT_euclid_Q1_desi_dr1_dataset" 
+    out_dir: str = "/sps/euclid/Users/zoubian/logs/astroPT_euclid_Q1_desi_dr1_dataset"
+    data_dir: str = "/sps/euclid/Users/zoubian/datasets/astroPT_euclid_Q1_desi_dr1_dataset" 
     train_split: str | None = None
     val_split: str | None = None
     test_split: str | None = None
@@ -317,14 +317,15 @@ def prepare_dataset_splits(
     train_dataset = EuclidDESIMultimodalDataset(
         data_dir=config.data_dir,
         split=train_split,
+        spectra_only=True,
     )
     val_dataset = (
-        EuclidDESIMultimodalDataset(data_dir=config.data_dir, split=val_split)
+        EuclidDESIMultimodalDataset(data_dir=config.data_dir, split=val_split, spectra_only=True)
         if val_split is not None
         else None
     )
     test_dataset = (
-        EuclidDESIMultimodalDataset(data_dir=config.data_dir, split=test_split)
+        EuclidDESIMultimodalDataset(data_dir=config.data_dir, split=test_split, spectra_only=True)
         if test_split is not None
         else None
     )

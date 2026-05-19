@@ -22,7 +22,8 @@ class EuclidDESIMultimodalDataset(Dataset):
         image_size: int = 224,
         spectrum_length: int = 7781,  # Standard DESI spectrum length
         image_transform=None,
-        data_dir: str = "/pbs/home/a/astroinfo09/data/astroPT_euclid_desi_dataset"
+        data_dir: str = "/sps/euclid/Users/zoubian/datasets/astroPT_euclid_Q1_desi_dr1_dataset",
+        spectra_only: bool = False,
     ):
         """
         Initialize the multimodal dataset.
@@ -33,11 +34,13 @@ class EuclidDESIMultimodalDataset(Dataset):
             spectrum_length: Expected length of spectra (for padding/truncating)
             image_transform: Optional transform to apply to images
             data_dir: Local directory containing the downloaded dataset
+            spectra_only: If True, skip image decoding to save CPU memory.
         """
         self.dataset = load_dataset(data_dir, split=split)
         self.image_size = image_size
         self.spectrum_length = spectrum_length
         self.image_transform = image_transform
+        self.spectra_only = spectra_only
         
     def __len__(self):
         return len(self.dataset)
@@ -46,22 +49,25 @@ class EuclidDESIMultimodalDataset(Dataset):
         """Get a single sample with both image and spectrum data."""
         sample = self.dataset[idx]
         
-        # Process RGB image
-        rgb_image = sample['RGB_image']
-        if isinstance(rgb_image, Image.Image):
-            # Resize to target size
-            rgb_image = rgb_image.resize((self.image_size, self.image_size), Image.LANCZOS)
-            rgb_image = np.array(rgb_image)
-        
-        # Convert to tensor format (C, H, W) and normalize
-        if rgb_image.ndim == 3:
-            rgb_image = torch.from_numpy(rgb_image).permute(2, 0, 1).float() / 255.0
+        # Process RGB image (skip when spectra_only to save CPU memory)
+        if self.spectra_only:
+            rgb_image = None
         else:
-            rgb_image = torch.from_numpy(rgb_image).unsqueeze(0).float() / 255.0
-        
-        # Apply transforms if provided
-        if self.image_transform is not None:
-            rgb_image = self.image_transform(rgb_image)
+            rgb_image = sample['RGB_image']
+            if isinstance(rgb_image, Image.Image):
+                # Resize to target size
+                rgb_image = rgb_image.resize((self.image_size, self.image_size), Image.LANCZOS)
+                rgb_image = np.array(rgb_image)
+            
+            # Convert to tensor format (C, H, W) and normalize
+            if rgb_image.ndim == 3:
+                rgb_image = torch.from_numpy(rgb_image).permute(2, 0, 1).float() / 255.0
+            else:
+                rgb_image = torch.from_numpy(rgb_image).unsqueeze(0).float() / 255.0
+            
+            # Apply transforms if provided
+            if self.image_transform is not None:
+                rgb_image = self.image_transform(rgb_image)
         
         # Process spectrum data
         spectrum_flux = None
