@@ -142,6 +142,7 @@ def extract_embeddings_with_diagnostics(
     image_patch_size: int,
     spectrum_patch_size: int,
     device: str,
+    block_size: int,
     max_batches: int = None,
 ):
     """Extract multimodal embeddings with duplication checks.
@@ -194,6 +195,13 @@ def extract_embeddings_with_diagnostics(
                 if not inputs:
                     print(f"Warning: Empty inputs for batch {batch_idx}")
                     continue
+
+                # Truncate all modality token sequences to block_size (same as training)
+                for key in list(inputs.keys()):
+                    if not key.endswith('_positions') and key + '_positions' in inputs:
+                        if inputs[key].shape[1] > block_size:
+                            inputs[key] = inputs[key][:, :block_size]
+                            inputs[key + '_positions'] = inputs[key + '_positions'][:, :block_size]
                 
                 # Track object IDs for duplication detection
                 object_ids = batch.get('all_object_ids', [])
@@ -419,7 +427,8 @@ def main():
         image_patch_size,
         spectrum_patch_size,
         args.device,
-        max_batches,
+        block_size=config.block_size,
+        max_batches=max_batches,
     )
     
     # Save results if extraction was successful
